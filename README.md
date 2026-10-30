@@ -2,6 +2,8 @@
 
 中文 · [English](README.en.md)
 
+> **English** — A **local document library for DSH Desktop**: a file cabinet shared across all conversations. Files stay on your machine (nothing is uploaded); every new chat can search, read and download them through four tools (`library_list`, `library_search`, `library_read`, `library_save`), and a **Local Library** section shows up in Settings. PDF / Word / Excel / PowerPoint / images are extracted into searchable text. MIT licensed. → **[Full English README](README.en.md)**
+
 给 DSH Desktop 用的**本地资料库**插件：一个跨会话共享的文件柜。
 
 - **设置左栏多一个「本地资料库」分区**：拖拽上传（含整个文件夹）、检索、按类型过滤、下载、批量打包下载、改标签、删除、重建索引。
