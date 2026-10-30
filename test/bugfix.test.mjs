@@ -231,6 +231,15 @@ check(
   nameOnlyText.slice(0, 300)
 )
 
+// 设置页走的是 GET /list?q=，这条路径也必须带 matchedBy，否则客户端拿不到来源标记。
+const nameOnlyList = await call('GET', `/dsh-local-library/list?q=${encodeURIComponent('只命中文件名')}&limit=5`)
+const nameOnlyRow = (nameOnlyList.json?.items || []).find((row) => row.id === nameOnlyUp.json?.item?.id)
+check(
+  'BUG11d /list?q= 也返回 matchedBy',
+  Boolean(nameOnlyRow) && nameOnlyRow.matchedBy === 'name',
+  JSON.stringify({ matchedBy: nameOnlyRow?.matchedBy })
+)
+
 // 正文命中的仍然给片段，且 matchedBy 是 body
 const bodyOnlyUp = await upload('正文命中示例.md', '这段正文里包含独有标记 蓝鲸协议 三个词')
 await waitIndexed(bodyOnlyUp.json?.item?.id)
