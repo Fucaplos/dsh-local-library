@@ -251,6 +251,63 @@ check(
   JSON.stringify({ matchedBy: bodyHit?.matchedBy, snippet: bodyHit?.snippet })
 )
 
+// ── BUG 12：中文 bigram 让「擦边」也命中，需要严格匹配开关 ───────────────
+// "预算表里的差旅费" 切成 7 个 bigram；正文里只出现 "差旅费" 的文件命中率只有 2/7，
+// 宽松模式仍会返回（用户看到的就是"搜什么都有一堆结果"），严格模式应当滤掉。
+const strictFull = await upload('严格-完整句.md', '本次会议讨论预算表里的差旅费标准，并给出上限。')
+const strictPartial = await upload('严格-部分词.md', '差旅费 报销 流程 说明')
+await waitIndexed(strictFull.json?.item?.id)
+await waitIndexed(strictPartial.json?.item?.id)
+
+const looseHits = await searchTool.execute({ query: '预算表里的差旅费', limit: 20 })
+const looseIds = (looseHits.results || []).map((row) => row.id)
+check(
+  'BUG12a 宽松模式两份都命中',
+  looseIds.includes(strictFull.json?.item?.id) && looseIds.includes(strictPartial.json?.item?.id),
+  JSON.stringify(looseIds)
+)
+
+const strictHits = await searchTool.execute({ query: '预算表里的差旅费', limit: 20, strict: true })
+const strictIds = (strictHits.results || []).map((row) => row.id)
+check(
+  'BUG12b 严格模式只留整句命中的那份',
+  strictIds.includes(strictFull.json?.item?.id) && !strictIds.includes(strictPartial.json?.item?.id),
+  JSON.stringify(strictIds)
+)
+
+const noSuch = await searchTool.execute({ query: 'zzzmarker', limit: 20, strict: true })
+check('BUG12c 严格模式下纯拉丁无命中的查询返回空', (noSuch.results || []).length === 0, JSON.stringify(noSuch.results))
+
+// ── BUG 13：严格匹配需要能记住，否则每次都要手动传参数 ─────────────────
+const configDefault = await call('GET', '/dsh-local-library/config')
+check('BUG13a 默认是宽松匹配', configDefault.json?.matchMode === 'loose', JSON.stringify(configDefault.json))
+
+const configBad = await call('PUT', '/dsh-local-library/config', {
+  body: Buffer.from(JSON.stringify({ matchMode: 'dee' })),
+  headers: { 'content-type': 'application/json' }
+})
+check('BUG13b 非法 matchMode 返回 400', configBad.status === 400 && configBad.json?.error === 'invalid-match-mode', JSON.stringify(configBad.json))
+
+const configSet = await call('PUT', '/dsh-local-library/config', {
+  body: Buffer.from(JSON.stringify({ matchMode: 'strict' })),
+  headers: { 'content-type': 'application/json' }
+})
+check('BUG13c 写入严格模式', configSet.status === 200 && configSet.json?.matchMode === 'strict', JSON.stringify(configSet.json))
+
+const persisted = await call('GET', `/dsh-local-library/list?q=${encodeURIComponent('预算表里的差旅费')}&limit=20`)
+const persistedIds = (persisted.json?.items || []).map((row) => row.id)
+check(
+  'BUG13d 设置落盘后 /list 走严格模式',
+  persistedIds.includes(strictFull.json?.item?.id) && !persistedIds.includes(strictPartial.json?.item?.id),
+  JSON.stringify(persistedIds)
+)
+
+const configReset = await call('PUT', '/dsh-local-library/config', {
+  body: Buffer.from(JSON.stringify({ matchMode: 'loose' })),
+  headers: { 'content-type': 'application/json' }
+})
+check('BUG13e 能切回宽松模式', configReset.json?.matchMode === 'loose', JSON.stringify(configReset.json))
+
 // ── BUG 8：下载方中途断开时 writeZip 不能永远等 drain ───────────────────
 const { writeZip } = await import('../lib/zip.js')
 const deadRes = new FakeRes()

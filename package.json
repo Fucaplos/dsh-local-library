@@ -1,6 +1,6 @@
 {
   "name": "dsh-local-library",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "本地资料库：把文件放进本机一处，之后每个对话都能直接检索、读取、下载",
   "author": "Fucaplos",
   "repository": {

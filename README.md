@@ -85,6 +85,8 @@ pwsh -File uninstall.ps1
 | --- | --- | --- |
 | GET | `/list?q=&limit=` | `{items, stats, pending}`；带 `q` 时按检索打分返回并附 `snippet`；`limit` 默认 200、上限 1000 |
 | GET | `/stats` | `{root, count, bytes, bytesText, indexed}` |
+| GET | `/config` | `{matchMode}`；严格匹配开关的持久化位置 |
+| PUT | `/config` | body `{matchMode:"loose"\|"strict"}`，非法值回 400 |
 | POST | `/upload?name=&dup=&tags=` | body 为原始字节，流式落盘；`dup` = `reject`(默认)/`keep`/`replace`；同内容重复返回 **409** 带 `duplicate` |
 | PATCH | `/item?id=` | body `{name?, tags?}`，改文件名或标签 |
 | POST | `/bundle` | body `{ids:[]}`，返回 zip（最多 300 个） |
@@ -97,7 +99,7 @@ pwsh -File uninstall.ps1
 | 工具 | 参数 | 用途 |
 | --- | --- | --- |
 | `library_list` | `limit?` | 列出全部 |
-| `library_search` | `query`、`limit?`、`kind?`、`tag?` | 检索文件名+正文+标签，返回片段与 `matchedBy`（命中来源）；`kind`/`tag` 是快捷过滤 |
+| `library_search` | `query`、`limit?`、`kind?`、`tag?`、`strict?` | 检索文件名+正文+标签，返回片段与 `matchedBy`（命中来源）；`kind`/`tag` 是快捷过滤；`strict` 走严格匹配（不传则用设置页的开关） |
 | `library_read` | `id` 或 `name`、`maxChars?`、`offset?` | 读正文，长文可分段续读（返回 `nextOffset`） |
 | `library_save` | `name`、`content`、`tags?` | 把结论/笔记存进库 |
 
@@ -117,6 +119,22 @@ pwsh -File uninstall.ps1
 ```
 
 开了之后上传的图片会被描述成一段文字存进索引，`library_search` 就能按图片内容找。
+
+### 严格匹配（设置页开关）
+
+中文是按两字组合（bigram）切词的，所以「不存在的词zzz」这种查询也会因为「不存 / 存在 / 在的」在别的文档里出现过而返回几条擦边结果。设置页检索框右侧的**严格匹配**开关可以收紧：
+
+- 关（默认，宽松）：按打分排序返回，结果多但可能有擦边。
+- 开（严格）：要求查询词的命中率 ≥ 60%，且查询里的英文/数字必须真的出现；整句原样出现的一律保留。
+
+开关状态存在 `本地资料库\settings.json`（只有一个字段）：
+
+```json
+{ "matchMode": "strict" }
+```
+
+对应接口：`GET /config` 读、`PUT /config` 写（body `{"matchMode":"strict"|"loose"}`，非法值回 400）。模型侧也可以单次覆盖：`library_search({ query, strict: true })`。
+
 
 ## 自检
 
@@ -145,6 +163,11 @@ $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 - 这个前缀路由在 DSH 鉴权层之外（设置页要能直接 fetch），所以**凡是能访问 127.0.0.1:端口 的本机进程都能读写整个库**。库是本机私有数据，不要放密钥。
 
 ## 更新记录
+
+**0.4.0（严格匹配开关）**
+- 新：设置页检索框右侧加「严格匹配」开关。之前搜「不存在的词zzz」也会返回几条——中文按 bigram 切词，「不存 / 存在 / 在的 / 的词」分别在别的文档里出现过，很难靠打分避免。现在可以一键收紧。
+- 新：严格规则——查询词命中率 ≥ 60%，且查询里的英文/数字必须真的出现，整句原样出现的一律保留。
+- 新：开关状态存在 `本地资料库\settings.json`（`{"matchMode":"loose"}`），接口 `GET /config` / `PUT /config`；`library_search` 新增 `strict` 参数，可以只对一次检索生效。
 
 **0.3.1（结构化抽取 + 命中来源）**
 - 新：ComfyUI 工作流 JSON 做结构化抽取，只留「模型 / 提示词 / 采样 / 画布 / 节点标题与类型」。实测 214KB 的工作流从 152,663 字压到 2,187 字，模型名和提示词照样能搜到。

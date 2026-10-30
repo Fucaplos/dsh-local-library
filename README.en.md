@@ -85,6 +85,8 @@ Prefix `/dsh-local-library`, no authentication (it sits outside the auth layer):
 | --- | --- | --- |
 | GET | `/list?q=&limit=` | `{items, stats, pending}`; with `q` returns scored hits plus `snippet`; `limit` defaults to 200, max 1000 |
 | GET | `/stats` | `{root, count, bytes, bytesText, indexed}` |
+| GET | `/config` | `{matchMode}` — where the strict-match switch lives |
+| PUT | `/config` | body `{matchMode:"loose"\|"strict"}`; invalid values return 400 |
 | POST | `/upload?name=&dup=&tags=` | raw bytes as body, streamed to disk; `dup` = `reject` (default) / `keep` / `replace`; identical content returns **409** with `duplicate` |
 | PATCH | `/item?id=` | body `{name?, tags?}` — rename or retag |
 | POST | `/bundle` | body `{ids:[]}` → zip (at most 300 entries) |
@@ -97,7 +99,7 @@ Prefix `/dsh-local-library`, no authentication (it sits outside the auth layer):
 | Tool | Arguments | Purpose |
 | --- | --- | --- |
 | `library_list` | `limit?` | List everything |
-| `library_search` | `query`, `limit?`, `kind?`, `tag?` | Score names, bodies and tags; returns snippets and `matchedBy`. `kind`/`tag` are shortcuts |
+| `library_search` | `query`, `limit?`, `kind?`, `tag?`, `strict?` | Score names, bodies and tags; returns snippets and `matchedBy`. `kind`/`tag` are shortcuts; `strict` enables strict match for this call only |
 | `library_read` | `id` or `name`, `maxChars?`, `offset?` | Read the body; long documents can be read in pages (`nextOffset`) |
 | `library_save` | `name`, `content`, `tags?` | Save a note or a conclusion into the library |
 
@@ -117,6 +119,21 @@ Add a `config` block to the entry in the profile's `cordis.patch.yml` (off when 
 ```
 
 With that enabled, uploaded images are described as text and stored in the index, so `library_search` can find them by content.
+
+### Strict match (settings switch)
+
+Chinese is tokenised into two-character pieces (bigrams), so a nonsense query can still return near misses just because its pieces appear elsewhere. The **Strict match** switch next to the search box tightens this:
+
+- off (default, loose): ranked by score; broad, occasionally loose.
+- on (strict): a result must cover at least 60% of the query pieces, Latin/digit tokens must literally appear, and an exact whole-phrase match is always kept.
+
+The switch persists in `本地资料库\settings.json`:
+
+```json
+{ "matchMode": "strict" }
+```
+
+`GET /config` reads it and `PUT /config` writes it. The model can also override it for a single call: `library_search({ query, strict: true })`.
 
 ## Self-checks
 
@@ -145,6 +162,12 @@ $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 - This prefix route lives outside the DSH auth layer (the Settings page has to be able to `fetch` it directly), so **any local process that can reach 127.0.0.1:port can read and write the whole library**. Treat it as private local data and do not store secrets in it.
 
 ## Changelog
+
+**0.4.0 — strict match switch**
+
+- New: a **Strict match** switch beside the search box. Chinese bigram tokenisation makes weak matches unavoidable by scoring alone; now you can tighten it with one click.
+- Strict rule: query-piece coverage >= 60%, Latin/digit tokens must literally appear, exact whole-phrase matches are always kept.
+- New: the switch persists in `settings.json` (`{"matchMode":"loose"}`) via `GET /config` / `PUT /config`; `library_search` gained a `strict` parameter for one-off overrides.
 
 **0.3.1 — structured extraction and match provenance**
 

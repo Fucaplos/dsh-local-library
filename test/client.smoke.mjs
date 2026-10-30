@@ -291,6 +291,7 @@ try {
     标签按钮: html2.includes('>标签<'),
     重复提示: html2.includes('ll-dupe') && html2.includes('覆盖旧的') && html2.includes('再存一份'),
     过滤条: html2.includes('ll-chip') && html2.includes('>PDF<') && html2.includes('>表格<'),
+    严格匹配开关: html2.includes('ll-strict') && html2.includes('严格匹配'),
     重建索引: html2.includes('>重建索引<')
   }
   for (const [name, ok] of Object.entries(seedText)) {
