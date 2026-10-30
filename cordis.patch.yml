@@ -1,5 +1,7 @@
-# bundle 层补丁：声明本组合包在 profile 里加载哪一行。
-# id 必须全局唯一且等于包名；"id: 值" 行尾不能写注释（商城预检按行匹配）。
-insert:
-  - id: dsh-local-library
-    name: 'dsh-local-library'
+# bundle 层补丁：声明本插件在 profile 配置树里加载哪一行。
+# 顶层必须是数组——dsh 校验原文：cordis.patch.yml must be a top-level YAML array
+# of loader patch entries（写成 `insert:` 映射会被判非法，`dsh plugin add` 直接回滚安装）。
+# id 必须全局唯一且等于包名；"id: 值" 行尾不能写注释（商城预检按行匹配 entry ID）。
+- insert:
+    - id: dsh-local-library
+      name: 'dsh-local-library'
