@@ -1,0 +1,39 @@
+{
+  "name": "dsh-local-library",
+  "version": "0.1.0",
+  "description": "本地资料库：把文件放进本机一处，之后每个对话都能直接检索、读取、下载",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./lib/*": "./lib/*",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "icon": "icon.svg",
+  "files": [
+    "lib",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection"
+      ],
+      "platform": "web"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "knowledge-base",
+    "local-library",
+    "rag"
+  ],
+  "license": "MIT"
+}

@@ -1,0 +1,14 @@
+# 依赖
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+
+# 测试临时目录（config 里把 DSH_HOME 指到这里，跑完自己清）
+test/.tmp-*/
+test/.tmp*/
+
+# 运行产物
+*.log
+.tmp/
+*.bak
+*.bak-*
