@@ -21,9 +21,30 @@
 
 ## 安装
 
+**前提**：Windows（靠 junction 让包名可解析，不需要管理员权限）、DSH Desktop、PowerShell 7。
+
+从仓库拉到本机，跑一条命令：
+
 ```powershell
-pwsh -File install.ps1            # 默认装到 profiles\web
-pwsh -File uninstall.ps1          # 卸载（数据默认保留；-PurgeData 才删）
+git clone https://github.com/Fucaplos/dsh-local-library.git
+cd dsh-local-library
+pwsh -File install.ps1
+```
+
+装完**重启 DSH Desktop**（宿主半侧在启动时加载），**再刷新页面 F5**（客户端半侧由启动清单投递）。设置（左下角齿轮）→ 左栏应出现「本地资料库」。
+
+脚本是**幂等**的：已经装过就只做自检，不会重复写配置。改配置前会先备份成 `cordis.patch.yml.bak-dsh-local-library-<时间戳>`。
+
+如果 DSH 的 profile 不在默认位置（自定义了 `DSH_HOME`、或多 profile），显式传路径：
+
+```powershell
+pwsh -File install.ps1 -ProfileRoot 'D:\my-dsh\harness\profiles\web'
+```
+
+卸载（数据默认保留，加 `-PurgeData` 才连文件一起删）：
+
+```powershell
+pwsh -File uninstall.ps1
 ```
 
 安装做了什么（也说明了为什么这么装）：
@@ -36,8 +57,7 @@ pwsh -File uninstall.ps1          # 卸载（数据默认保留；-PurgeData 才
    ```
    `id` 必须全局唯一且与包名一致；`id: 值` 行尾绝不能写注释（商城预检会判错）。
 3. 不碰 `package.json` / `pnpm-lock.yaml` / generation 投影。走 pnpm 会被 `.desktop-bin\pnpm.cmd` 的 pnpm-runner 干扰，容易把 generation 投影还原成旧状态。
-
-装完**重启 DSH Desktop**（宿主半侧在启动时加载），**再刷新页面**（客户端半侧由启动清单投递）。
+4. 最后做一次包名解析自检：`dsh-local-library` 与 `dsh-local-library/client` 都要能解析到，否则宿主半侧或客户端半侧会缺一半。
 
 ## 结构
 
@@ -51,7 +71,9 @@ pwsh -File uninstall.ps1          # 卸载（数据默认保留；-PurgeData 才
 | `lib/vision.js` | 可选：图片转文字描述（OpenAI 兼容 chat/completions，默认智谱 `glm-4v-flash`） |
 | `lib/zip.js` | 打包下载用的流式 ZIP 写入器（stored，UTF-8 文件名） |
 | `cordis.patch.yml` | bundle 清单（`insert` 一节） |
-| `test/*.mjs` | 四套自检，见下 |
+| `install.ps1` / `uninstall.ps1` | 装/卸到 DSH profile（建 junction + 登记 patch 行） |
+| `test/*.mjs` | 六套自检，见下 |
+| `LICENSE` | MIT |
 
 ## HTTP 接口（同源，浏览器直接调）
 
@@ -135,4 +157,10 @@ $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 - 修：「文件太大已跳过」的提示被「已上传 N 个」覆盖。
 - 修：选中超过 300 个时静默少打包，现在会说明。
 - 修：`installNavIcon` 的 MutationObserver 在聊天流式输出时高频跑全局选择器（改 250ms 防抖 + 只在设置弹窗内查）。
+
+## 许可证
+
+[MIT](LICENSE) © 2026 Fucaplos
+
+随便用、改、卖，保留版权声明和许可文本即可；软件按「原样」提供，作者不担责。
 
