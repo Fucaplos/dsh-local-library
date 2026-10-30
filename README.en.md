@@ -97,7 +97,7 @@ Prefix `/dsh-local-library`, no authentication (it sits outside the auth layer):
 | Tool | Arguments | Purpose |
 | --- | --- | --- |
 | `library_list` | `limit?` | List everything |
-| `library_search` | `query`, `limit?`, `kind?`, `tag?` | Score names, bodies and tags; returns snippets. `kind`/`tag` are shortcuts |
+| `library_search` | `query`, `limit?`, `kind?`, `tag?` | Score names, bodies and tags; returns snippets and `matchedBy`. `kind`/`tag` are shortcuts |
 | `library_read` | `id` or `name`, `maxChars?`, `offset?` | Read the body; long documents can be read in pages (`nextOffset`) |
 | `library_save` | `name`, `content`, `tags?` | Save a note or a conclusion into the library |
 
@@ -128,7 +128,7 @@ $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 & $node test\bugfix.test.mjs         # regressions: one assertion per audited bug (name with %, offset past the end, empty-file bundle…)
 & $node test\navicon.test.mjs        # sidebar icon against a fake DOM (no lookup while the dialog is closed, debounce, disposer)
 & $node test\cordis.integration.mjs  # load the plugin in a real Cordis container, assert what it registers
-& $node test\extract.test.mjs        # 15 extractor cases
+& $node test\extract.test.mjs        # 18 extractor cases
 ```
 
 ## Known limitations
@@ -141,9 +141,15 @@ $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 - Search is **keyword scoring** (CJK bigrams plus Latin words, with names and tags weighted higher), not vector search.
 - Folder drops are flattened (no subdirectories); the top-level folder name is recorded as a tag so you can filter by source.
 - `tag:` filtering is **substring** matching: `tag:财务` also matches 「财务部」.
+- ComfyUI workflow JSON (`.json`, >1.5KB) is reduced to model names, prompts, sampling parameters, canvas size, node titles and node types; node coordinates and widget values never reach the body text, so they are not searchable. Every other JSON file is indexed verbatim.
 - This prefix route lives outside the DSH auth layer (the Settings page has to be able to `fetch` it directly), so **any local process that can reach 127.0.0.1:port can read and write the whole library**. Treat it as private local data and do not store secrets in it.
 
 ## Changelog
+
+**0.3.1 — structured extraction and match provenance**
+
+- New: ComfyUI workflow JSON is summarised into models / prompts / sampling / canvas / node titles and types. A measured 214 KB workflow went from 152,663 characters to 2,187 while model names and prompts stay searchable.
+- New: `library_search` and `GET /list?q=` return `matchedBy` (`body` / `name` / `both`). A name-only or tag-only hit is now labelled “matched by file name or tag” in the tool output and in the Settings list, instead of looking like an empty result.
 
 **0.3 — audit round**
 

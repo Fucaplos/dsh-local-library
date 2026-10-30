@@ -416,6 +416,93 @@ try {
     assert.equal(result.text, '')
     assert.equal(result.note, 'unsupported-type')
   })
+
+  // ── ComfyUI 工作流结构化抽取（0.3.1）──────────────────────────────────────
+
+  await test('comfyui: UI workflow 抽成「模型 + 提示词 + 采样 + 节点类型」', async () => {
+    const workflow = {
+      last_node_id: 12,
+      last_link_id: 12,
+      nodes: [
+        { id: 4, type: 'CheckpointLoaderSimple', widgets_values: ['SDXL\\juggernautXL_v9.safetensors'] },
+        {
+          id: 6,
+          type: 'CLIPTextEncode',
+          title: '正向提示词',
+          widgets_values: ['一只橘猫坐在窗台上，午后逆光，胶片颗粒感，浅景深，35mm，高细节，柔和阴影，暖色调']
+        },
+        { id: 7, type: 'CLIPTextEncode', title: '反向提示词', widgets_values: ['模糊，低质量，水印，畸形手指'] },
+        { id: 3, type: 'KSampler', widgets_values: [123456789, 'randomize', 30, 6.5, 'dpmpp_2m', 'karras', 1] },
+        { id: 5, type: 'EmptyLatentImage', widgets_values: [832, 480, 1] },
+        { id: 8, type: 'VAEDecode', widgets_values: [] },
+        { id: 9, type: 'VAELoader', widgets_values: ['sdxl_vae.safetensors'] },
+        { id: 10, type: 'LatentUpscale', widgets_values: [1.5, 'nearest-exact'] },
+        { id: 11, type: 'PreviewImage', widgets_values: [] },
+        { id: 12, type: 'Note', widgets_values: ['分辨率别超过 1024，否则爆显存，这里多写几个字把文件撑过阈值'] }
+      ],
+      links: [
+        [1, 4, 0, 6, 0, 'CLIP'],
+        [2, 6, 0, 3, 0, 'CONDITIONING'],
+        [3, 7, 0, 3, 1, 'CONDITIONING'],
+        [4, 5, 0, 3, 3, 'LATENT'],
+        [5, 3, 0, 8, 0, 'LATENT']
+      ]
+    }
+    const file = path.join(tempDirectory, 'wf-ui.json')
+    await fsp.writeFile(file, JSON.stringify(workflow, null, 2), 'utf8')
+    const result = await extractText({ path: file, name: 'wf-ui.json', mime: 'application/json' })
+
+    assert.equal(result.kind, 'text')
+    assert.equal(result.note, 'comfyui-workflow')
+    assert.ok(result.text.includes('juggernautXL_v9.safetensors'), '模型名要保留')
+    assert.ok(result.text.includes('sdxl_vae.safetensors'), 'VAE 也要保留')
+    assert.ok(result.text.includes('橘猫坐在窗台上'), '提示词正文要保留')
+    assert.ok(result.text.includes('dpmpp_2m'), '采样器名要保留')
+    assert.ok(result.text.includes('cfg 6.5'), 'sampling cfg 要提取')
+    assert.ok(result.text.includes('832x480'), '画布尺寸要提取')
+    assert.ok(result.text.includes('CLIPTextEncode×2'), '节点类型计数要保留')
+    assert.ok(result.text.includes('正向提示词'), '节点标题要保留')
+    assert.ok(!result.text.includes('last_node_id'), '原始 JSON 噪声不应出现')
+    assert.ok(result.text.length < 2000, `结构化后应远小于原文，实际 ${result.text.length}`)
+  })
+
+  await test('comfyui: API 格式（class_type + inputs）也能识别', async () => {
+    const prompt = {
+      '3': {
+        class_type: 'KSampler',
+        _meta: { title: '采样器' },
+        inputs: { seed: 42, steps: 24, cfg: 5, sampler_name: 'euler_ancestral', scheduler: 'normal', denoise: 1 }
+      },
+      '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: 'flux1-dev.safetensors' } },
+      '6': {
+        class_type: 'CLIPTextEncode',
+        inputs: { text: '赛博朋克街道，霓虹灯反射在湿漉漉的地面上，雨夜，电影感，宽银幕比例，高对比度' }
+      },
+      '9': { class_type: 'EmptyLatentImage', inputs: { width: 1344, height: 768, batch_size: 1 } }
+    }
+    const file = path.join(tempDirectory, 'wf-api.json')
+    await fsp.writeFile(file, JSON.stringify(prompt, null, 2) + '\n'.repeat(1200), 'utf8')
+    const result = await extractText({ path: file, name: 'wf-api.json', mime: 'application/json' })
+
+    assert.equal(result.note, 'comfyui-workflow')
+    assert.ok(result.text.includes('api-prompt'), '应标记为 API 格式')
+    assert.ok(result.text.includes('flux1-dev.safetensors'))
+    assert.ok(result.text.includes('赛博朋克街道'))
+    assert.ok(result.text.includes('steps: 24'))
+    assert.ok(result.text.includes('1344x768'))
+  })
+
+  await test('comfyui: 非工作流的 JSON 保持原样（不误伤）', async () => {
+    const file = path.join(tempDirectory, 'plain.json')
+    const payload = { users: [{ id: 1, name: '张三' }, { id: 2, name: '李四' }] }
+    await fsp.writeFile(file, JSON.stringify(payload, null, 2) + '\n'.repeat(400), 'utf8')
+    const result = await extractText({ path: file, name: 'plain.json', mime: 'application/json' })
+
+    assert.equal(result.note, undefined)
+    assert.ok(result.text.includes('"users"'), '普通 JSON 应保持原始文本')
+    assert.ok(result.text.includes('张三'))
+  })
+
 } catch (error) {
   results.fail += 1
   results.failures.push({ name: 'fixture setup / top-level', error })

@@ -201,6 +201,47 @@ check(
   JSON.stringify({ ext: renamed.json?.item?.ext, mime: renamed.json?.item?.mime })
 )
 
+// 正文索引是异步的（indexInBackground），等它抽完再检索，否则正文还是空的。
+async function waitIndexed(id, timeoutMs = 5000) {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    const listed = await call('GET', '/dsh-local-library/list?limit=1000')
+    const item = (listed.json?.items || []).find((row) => row.id === id)
+    if (item && Number(item.textChars) > 0) return true
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  return false
+}
+
+// ── BUG 11：只命中文件名时，工具里看不出「为什么命中」 ─────────────────
+// 之前 snippet 为空就直接不显示任何说明，看起来像空结果。
+const nameOnlyUp = await upload('季度汇报-只命中文件名.md', '正文里没有那个词，全是别的内容占位')
+const searchTool = tools.find((tool) => tool.name === 'library_search')
+const nameOnly = await searchTool.execute({ query: '只命中文件名', limit: 5 })
+const hit = (nameOnly.results || []).find((item) => item.id === nameOnlyUp.json?.item?.id)
+check(
+  'BUG11 文件名命中时带 matchedBy 且片段为空',
+  Boolean(hit) && hit.matchedBy === 'name' && hit.snippet === '',
+  JSON.stringify({ matchedBy: hit?.matchedBy, snippet: hit?.snippet })
+)
+const nameOnlyText = searchTool.output.render({}, nameOnly)[0].text
+check(
+  'BUG11b 渲染里说明「按文件名/标签命中」',
+  nameOnlyText.includes('按文件名/标签'),
+  nameOnlyText.slice(0, 300)
+)
+
+// 正文命中的仍然给片段，且 matchedBy 是 body
+const bodyOnlyUp = await upload('正文命中示例.md', '这段正文里包含独有标记 蓝鲸协议 三个词')
+await waitIndexed(bodyOnlyUp.json?.item?.id)
+const bodyHitResult = await searchTool.execute({ query: '蓝鲸协议', limit: 5 })
+const bodyHit = (bodyHitResult.results || []).find((item) => item.id === bodyOnlyUp.json?.item?.id)
+check(
+  'BUG11c 正文命中时给片段且 matchedBy 为 body',
+  Boolean(bodyHit) && bodyHit.matchedBy === 'body' && bodyHit.snippet.includes('蓝鲸协议'),
+  JSON.stringify({ matchedBy: bodyHit?.matchedBy, snippet: bodyHit?.snippet })
+)
+
 // ── BUG 8：下载方中途断开时 writeZip 不能永远等 drain ───────────────────
 const { writeZip } = await import('../lib/zip.js')
 const deadRes = new FakeRes()

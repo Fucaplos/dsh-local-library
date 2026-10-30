@@ -97,7 +97,7 @@ pwsh -File uninstall.ps1
 | 工具 | 参数 | 用途 |
 | --- | --- | --- |
 | `library_list` | `limit?` | 列出全部 |
-| `library_search` | `query`、`limit?`、`kind?`、`tag?` | 检索文件名+正文+标签，返回片段；`kind`/`tag` 是快捷过滤 |
+| `library_search` | `query`、`limit?`、`kind?`、`tag?` | 检索文件名+正文+标签，返回片段与 `matchedBy`（命中来源）；`kind`/`tag` 是快捷过滤 |
 | `library_read` | `id` 或 `name`、`maxChars?`、`offset?` | 读正文，长文可分段续读（返回 `nextOffset`） |
 | `library_save` | `name`、`content`、`tags?` | 把结论/笔记存进库 |
 
@@ -128,7 +128,7 @@ $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 & $node test\bugfix.test.mjs         # 回归：审计出的每个 bug 一条断言（文件名 %、offset 越界、空文件打包…）
 & $node test\navicon.test.mjs        # 左栏图标的假 DOM 测试（弹窗未开不查、防抖、disposer）
 & $node test\cordis.integration.mjs  # 真 Cordis 容器里加载插件，断言注册物
-& $node test\extract.test.mjs        # 抽取器 15 条
+& $node test\extract.test.mjs        # 抽取器 18 条
 ```
 
 ## 已知限制
@@ -141,9 +141,14 @@ $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 - 检索是**关键词打分**（中文 bigram + 拉丁词，文件名/标签权重高），不是向量检索。
 - 拖文件夹上传是平铺的（不建子目录），顶层文件夹名会写成标签，方便按来源筛。
 - `tag:` 过滤是**包含**匹配：`tag:财务` 会命中「财务部」。
+- ComfyUI 工作流 JSON（`.json`，>1.5KB）只留模型名、提示词、采样参数、画布尺寸、节点标题与类型，节点坐标/控件值不进正文——所以按坐标或参数数字搜不到。其他 JSON 原样入正文。
 - 这个前缀路由在 DSH 鉴权层之外（设置页要能直接 fetch），所以**凡是能访问 127.0.0.1:端口 的本机进程都能读写整个库**。库是本机私有数据，不要放密钥。
 
 ## 更新记录
+
+**0.3.1（结构化抽取 + 命中来源）**
+- 新：ComfyUI 工作流 JSON 做结构化抽取，只留「模型 / 提示词 / 采样 / 画布 / 节点标题与类型」。实测 214KB 的工作流从 152,663 字压到 2,187 字，模型名和提示词照样能搜到。
+- 新：`library_search` / `GET /list?q=` 返回 `matchedBy`（`body` / `name` / `both`），只命中文件名或标签时，工具里会写「按文件名/标签命中」，设置页列表也会显示这一行，不再出现「命中但没片段」的空结果。
 
 **0.3（bug 审计轮）**
 - 修：文件名含 `%` 时上传 500（`URLSearchParams` 已解码又 `decodeURIComponent` 一次）。
