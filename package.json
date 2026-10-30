@@ -20,7 +20,9 @@
     "lib",
     "icon.svg",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "README.en.md",
+    "LICENSE"
   ],
   "dsh": {
     "bundle": {
