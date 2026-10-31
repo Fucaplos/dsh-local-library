@@ -145,7 +145,7 @@ $env:ELECTRON_NO_ASAR='1'
 $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 & $node test\client.smoke.mjs        # 客户端：载入、注册分区、SSR 渲染（含列表/多选/标签/重复提示）
 & $node test\plugin.smoke.mjs        # 宿主：上传→检索→分段读→标签→打包→删除→工具→提示词段
-& $node test\bugfix.test.mjs         # 回归：审计出的每个 bug 一条断言（文件名 %、offset 越界、空文件打包…）
+& $node test\bugfix.test.mjs         # 回归：审计出的每个 bug 一条断言（28 条：文件名 %、offset 越界、空文件打包、标签精确匹配、非法日期提示、init 重试…）
 & $node test\navicon.test.mjs        # 左栏图标的假 DOM 测试（弹窗未开不查、防抖、disposer）
 & $node test\cordis.integration.mjs  # 真 Cordis 容器里加载插件，断言注册物
 & $node test\extract.test.mjs        # 抽取器 18 条
@@ -160,11 +160,22 @@ $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 - xlsx 不还原日期序列号、公式结果与合并单元格。
 - 检索是**关键词打分**（中文 bigram + 拉丁词，文件名/标签权重高），不是向量检索。
 - 拖文件夹上传是平铺的（不建子目录），顶层文件夹名会写成标签，方便按来源筛。
-- `tag:` 过滤是**包含**匹配：`tag:财务` 会命中「财务部」。
+- `tag:` 过滤是**精确**匹配整个标签（0.4.1 起）：`tag:财务` 不再连「财务部」一起筛出来；要匹配「财务部」就写 `tag:财务部`。
+- `after:` / `before:` 只吃能被 `Date.parse` 认出来的日期（`after:2026-10-01`）。写错（`after:2026-13-99`）时这个过滤条件会被忽略，但 `GET /list`、`library_search` 与设置页都会明确提示「已忽略」，不会静默失效。
 - ComfyUI 工作流 JSON（`.json`，>1.5KB）只留模型名、提示词、采样参数、画布尺寸、节点标题与类型，节点坐标/控件值不进正文——所以按坐标或参数数字搜不到。其他 JSON 原样入正文。
 - 这个前缀路由在 DSH 鉴权层之外（设置页要能直接 fetch），所以**凡是能访问 127.0.0.1:端口 的本机进程都能读写整个库**。库是本机私有数据，不要放密钥。
 
 ## 更新记录
+
+**0.4.1（把审计剩下的 8 条小毛病全修了）**
+- 修：上传没有超时，网络卡住时 `XHR` 永远不 settle、队列项一直显示「上传中」。现在 60 秒没有进度就自动放弃并提示。
+- 修：上传进度每来一个 `progress` 事件就刷一次 state，512MB 文件能把页面拖卡；改成按时间节流（150ms）。
+- 修：标签编辑按 Esc 取消后，输入框卸载触发的 blur 又把旧值存了回去。现在 Esc 是真正的取消。
+- 修：`tag:` 用包含匹配，`tag:财务` 会把「财务部」也算上（见「已知限制」）。现在是精确匹配。
+- 修：`after:` / `before:` 日期写错时静默失效；现在会把「已忽略这个过滤条件」回给调用方和页面。
+- 修：`init()` 失败一次就被记忆成 rejected，整个进程生命周期里资料库都不可用；现在会重试。
+- 修：`library_read` 的 `offset` 落在 emoji 代理对中间时，正文从半个字符开始；现在自动对齐到下一个完整字符。
+- 补：`PATCH /item` 改名时 `ext` / `mime` 早就会跟着变，这次补上回归断言（BUG10）防止以后退化。
 
 **0.4.0（严格匹配开关）**
 - 新：设置页检索框右侧加「严格匹配」开关。之前搜「不存在的词zzz」也会返回几条——中文按 bigram 切词，「不存 / 存在 / 在的 / 的词」分别在别的文档里出现过，很难靠打分避免。现在可以一键收紧。

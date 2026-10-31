@@ -4,7 +4,7 @@
  * 每条都以「修好之后应该成立」的形式写，所以修之前应当看到 FAIL。
  * 运行：$env:ELECTRON_NO_ASAR='1'; & ...\.desktop-bin\node.cmd test\bugfix.test.mjs
  */
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable, Writable } from 'node:stream'
@@ -307,6 +307,80 @@ const configReset = await call('PUT', '/dsh-local-library/config', {
   headers: { 'content-type': 'application/json' }
 })
 check('BUG13e 能切回宽松模式', configReset.json?.matchMode === 'loose', JSON.stringify(configReset.json))
+
+// ── BUG 14：`tag:` 是包含匹配，`tag:财务` 会把「财务部」也筛出来 ──────────
+const tagExact = await upload('标签-财务.md', '无关正文')
+const tagFuzzy = await upload('标签-财务部.md', '无关正文')
+await call('PATCH', `/dsh-local-library/item?id=${tagExact.json?.item?.id}`, {
+  body: Buffer.from(JSON.stringify({ tags: ['财务'] })),
+  headers: { 'content-type': 'application/json' }
+})
+await call('PATCH', `/dsh-local-library/item?id=${tagFuzzy.json?.item?.id}`, {
+  body: Buffer.from(JSON.stringify({ tags: ['财务部'] })),
+  headers: { 'content-type': 'application/json' }
+})
+const tagHits = await searchTool.execute({ query: 'tag:财务', limit: 20 })
+const tagIds = (tagHits.results || []).map((row) => row.id)
+check(
+  'BUG14 tag: 精确匹配整个标签，不命中「财务部」',
+  tagIds.includes(tagExact.json?.item?.id) && !tagIds.includes(tagFuzzy.json?.item?.id),
+  JSON.stringify(tagIds)
+)
+
+// ── BUG 15：`after:` 日期写错时静默失效，用户以为筛过了 ─────────────────
+const { queryWarnings } = await import('../lib/store.js')
+check('BUG15a queryWarnings 能认出非法日期', queryWarnings('after:2026-13-99').length === 1, JSON.stringify(queryWarnings('after:2026-13-99')))
+check('BUG15b 合法日期不报警', queryWarnings('after:2026-10-01').length === 0, JSON.stringify(queryWarnings('after:2026-10-01')))
+const warnList = await call('GET', `/dsh-local-library/list?q=${encodeURIComponent('after:2026-13-99')}&limit=5`)
+check(
+  'BUG15c /list 把被忽略的过滤条件带回来',
+  Array.isArray(warnList.json?.warnings) && warnList.json.warnings.length === 1,
+  JSON.stringify(warnList.json?.warnings)
+)
+const warnTool = await searchTool.execute({ query: 'after:2026-13-99', limit: 5 })
+const warnText = searchTool.output.render({}, warnTool)[0].text
+check(
+  'BUG15d library_search 渲染里提示日期被忽略',
+  Array.isArray(warnTool.warnings) && warnTool.warnings.length === 1 && warnText.includes('⚠'),
+  JSON.stringify({ warnings: warnTool.warnings, head: warnText.slice(0, 40) })
+)
+
+// ── BUG 16：init() 失败一次就被永久记忆，整进程都不可用 ──────────────────
+const { LibraryStore } = await import('../lib/store.js')
+const retryRoot = await mkdtemp(join(tmpdir(), 'll-retry-'))
+await writeFile(join(retryRoot, 'files'), 'not a directory')
+const retryStore = new LibraryStore(retryRoot)
+let firstInit = ''
+try {
+  await retryStore.init()
+} catch (error) {
+  firstInit = String(error?.code || error?.message || error)
+}
+await unlink(join(retryRoot, 'files'))
+let secondInit = false
+try {
+  await retryStore.init()
+  secondInit = true
+} catch {
+  secondInit = false
+}
+check('BUG16 init 失败后能重试成功，不被永久记忆', firstInit !== '' && secondInit, `first=${firstInit} second=${secondInit}`)
+await rm(retryRoot, { recursive: true, force: true })
+
+// ── BUG 17：offset 落在代理对中间时正文从半个 emoji 开始 ────────────────
+const surrogateRead = await readTool.execute({ id: emojiSave.id, maxChars: 20, offset: 4 })
+const surrogateText = String(surrogateRead.text || '')
+check(
+  'BUG17 offset 落在代理对中间时自动对齐到下一个字符',
+  !/^[\uDC00-\uDFFF]/.test(surrogateText) && surrogateText.startsWith('四'),
+  JSON.stringify(surrogateText.slice(0, 6))
+)
+
+// ── BUG 18：上传无超时 / 进度不节流 / Esc 取消却被 blur 存回（客户端源码守卫）
+const clientSrc = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
+check('BUG18a 上传有心跳看门狗', clientSrc.includes('UPLOAD_STALL_MS') && clientSrc.includes('xhr.abort()'), '')
+check('BUG18b 进度条按时间节流', clientSrc.includes('PROGRESS_THROTTLE_MS'), '')
+check('BUG18c Esc 取消标签编辑不会被 blur 存回', clientSrc.includes('tagAbort.current'), '')
 
 // ── BUG 8：下载方中途断开时 writeZip 不能永远等 drain ───────────────────
 const { writeZip } = await import('../lib/zip.js')

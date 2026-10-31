@@ -142,7 +142,7 @@ $env:ELECTRON_NO_ASAR='1'
 $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 & $node test\client.smoke.mjs        # client: load, section registration, SSR render (list / multi-select / tags / duplicate prompt)
 & $node test\plugin.smoke.mjs        # host: upload → search → paged read → tags → bundle → delete → tools → prompt section
-& $node test\bugfix.test.mjs         # regressions: one assertion per audited bug (name with %, offset past the end, empty-file bundle…)
+& $node test\bugfix.test.mjs         # regressions: one assertion per audited bug (28: name with %, offset past the end, empty-file bundle, exact tag match, bad date warning, init retry…)
 & $node test\navicon.test.mjs        # sidebar icon against a fake DOM (no lookup while the dialog is closed, debounce, disposer)
 & $node test\cordis.integration.mjs  # load the plugin in a real Cordis container, assert what it registers
 & $node test\extract.test.mjs        # 18 extractor cases
@@ -157,11 +157,23 @@ $node = "$env:APPDATA\dsh-desktop\harness\.desktop-bin\node.cmd"
 - xlsx does not reconstruct date serials, formula results or merged cells.
 - Search is **keyword scoring** (CJK bigrams plus Latin words, with names and tags weighted higher), not vector search.
 - Folder drops are flattened (no subdirectories); the top-level folder name is recorded as a tag so you can filter by source.
-- `tag:` filtering is **substring** matching: `tag:财务` also matches 「财务部」.
+- `tag:` filtering matches the **whole tag exactly** (since 0.4.1): `tag:财务` no longer drags in 「财务部」 — write `tag:财务部` for that.
+- `after:` / `before:` only accept dates that `Date.parse` understands (`after:2026-10-01`). A malformed value (`after:2026-13-99`) is ignored, but `GET /list`, `library_search` and the Settings page all say so explicitly instead of failing silently.
 - ComfyUI workflow JSON (`.json`, >1.5KB) is reduced to model names, prompts, sampling parameters, canvas size, node titles and node types; node coordinates and widget values never reach the body text, so they are not searchable. Every other JSON file is indexed verbatim.
 - This prefix route lives outside the DSH auth layer (the Settings page has to be able to `fetch` it directly), so **any local process that can reach 127.0.0.1:port can read and write the whole library**. Treat it as private local data and do not store secrets in it.
 
 ## Changelog
+
+**0.4.1 — the last eight audit items, all fixed**
+
+- Fixed: uploads had no timeout; a stalled `XHR` never settled and the queue row sat on "uploading" forever. Now 60s without progress aborts and says so.
+- Fixed: progress re-rendered on every `progress` event (a 512MB file could make the page stutter); updates are now throttled to 150ms.
+- Fixed: pressing Esc to cancel a tag edit still saved the old value, because unmounting the input fires `blur`. Esc is a real cancel now.
+- Fixed: `tag:` was a substring match, so `tag:财务` also hit 「财务部」 (see Known limitations). It is an exact match now.
+- Fixed: a malformed `after:` / `before:` date was silently dropped; callers and the page are now told it was ignored.
+- Fixed: one failed `init()` was memoised as rejected, leaving the library dead for the life of the process; it retries now.
+- Fixed: when `library_read`'s `offset` landed inside an emoji surrogate pair, the body started mid-character; offsets snap to the next whole character.
+- Added a regression assertion (BUG10) for `PATCH /item` renaming rolling `ext` / `mime` forward, so it cannot silently regress.
 
 **0.4.0 — strict match switch**
 
